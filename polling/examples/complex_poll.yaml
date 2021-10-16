@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Poll
+metadata:
+  name: complex-poll
+  namespace: tekton-pipelines
+spec:
+  metadata:
+    name: complex-poll
+  description: This is an complex description
+  pollServiceAccountName: poll-sa
+  watchName: mainJob
+  pollFrequency: 30
+  pipelineRuns:
+  - name: mainJob
+    group : 0 
+    pollType : github
+    pollParams:
+    - name: url
+      value: https://api.github.com/repos/Jimbo4794/tekton-testing-repo
+    - name: branch
+      value: main
+    spec:
+      params:
+      - name: IMAGE
+        value: test
+      pipelineRef:
+        name: docker-build
+      # serviceAccountName: build-bot
+      resources:
+        - name: git-testing-repo
+          resourceRef:
+            name: tekton-testing-repo
+  - name: parallelJob
+    group : 0 
+    pollType : github
+    pollParams:
+    - name: url
+      value: https://api.github.com/repos/Jimbo4794/tekton-testing-repo
+    - name: branch
+      value: main
+    spec:
+      params:
+      - name: IMAGE
+        value: test
+      - name: NODDY
+        value: $(version)
+      pipelineRef:
+        name: docker-build
+      # serviceAccountName: build-bot
+      resources:
+        - name: git-testing-repo
+          resourceRef:
+            name: tekton-testing-repo
+  - name: dependantJob
+    group : 1 
+    pollType : github
+    pollParams:
+    - name: url
+      value: https://api.github.com/repos/Jimbo4794/tekton-testing-repo
+    - name: branch
+      value: main
+    spec:
+      params:
+      - name: IMAGE
+        value: test
+      pipelineRef:
+        name: docker-build
+      # serviceAccountName: build-bot
+      resources:
+        - name: git-testing-repo
+          resourceRef:
+            name: tekton-testing-repo
+        
