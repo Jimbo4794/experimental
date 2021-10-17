@@ -19,8 +19,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: default
     app.kubernetes.io/part-of: tekton-polling
-    pipeline.tekton.dev/release: "devel"
-    version: "devel"
+    version: "v1alpha1"
 spec:
   group: tekton.dev
   versions:
