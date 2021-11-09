@@ -24,9 +24,9 @@ import (
 	errors "errors"
 	fmt "fmt"
 
-	v1alpha1 "github.com/tektoncd/experimental/polling/pkg/apis/poll/v1alpha1"
+	v1alpha1 "github.com/tektoncd/experimental/polling/pkg/apis/scmpoll/v1alpha1"
 	versioned "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned"
-	typedtektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/poll/v1alpha1"
+	typedtektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/scmpoll/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -111,31 +111,31 @@ func (w *wrapTektonV1alpha1) RESTClient() rest.Interface {
 	panic("RESTClient called on dynamic client!")
 }
 
-func (w *wrapTektonV1alpha1) Polls(namespace string) typedtektonv1alpha1.PollInterface {
-	return &wrapTektonV1alpha1PollImpl{
+func (w *wrapTektonV1alpha1) SCMPolls(namespace string) typedtektonv1alpha1.SCMPollInterface {
+	return &wrapTektonV1alpha1SCMPollImpl{
 		dyn: w.dyn.Resource(schema.GroupVersionResource{
 			Group:    "tekton.dev",
 			Version:  "v1alpha1",
-			Resource: "polls",
+			Resource: "scmpolls",
 		}),
 
 		namespace: namespace,
 	}
 }
 
-type wrapTektonV1alpha1PollImpl struct {
+type wrapTektonV1alpha1SCMPollImpl struct {
 	dyn dynamic.NamespaceableResourceInterface
 
 	namespace string
 }
 
-var _ typedtektonv1alpha1.PollInterface = (*wrapTektonV1alpha1PollImpl)(nil)
+var _ typedtektonv1alpha1.SCMPollInterface = (*wrapTektonV1alpha1SCMPollImpl)(nil)
 
-func (w *wrapTektonV1alpha1PollImpl) Create(ctx context.Context, in *v1alpha1.Poll, opts v1.CreateOptions) (*v1alpha1.Poll, error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) Create(ctx context.Context, in *v1alpha1.SCMPoll, opts v1.CreateOptions) (*v1alpha1.SCMPoll, error) {
 	in.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "tekton.dev",
 		Version: "v1alpha1",
-		Kind:    "Poll",
+		Kind:    "SCMPoll",
 	})
 	uo := &unstructured.Unstructured{}
 	if err := convert(in, uo); err != nil {
@@ -145,62 +145,62 @@ func (w *wrapTektonV1alpha1PollImpl) Create(ctx context.Context, in *v1alpha1.Po
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.Poll{}
+	out := &v1alpha1.SCMPoll{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollImpl) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
+func (w *wrapTektonV1alpha1SCMPollImpl) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return w.dyn.Namespace(w.namespace).Delete(ctx, name, opts)
 }
 
-func (w *wrapTektonV1alpha1PollImpl) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+func (w *wrapTektonV1alpha1SCMPollImpl) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
 	return w.dyn.Namespace(w.namespace).DeleteCollection(ctx, opts, listOpts)
 }
 
-func (w *wrapTektonV1alpha1PollImpl) Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.Poll, error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.SCMPoll, error) {
 	uo, err := w.dyn.Namespace(w.namespace).Get(ctx, name, opts)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.Poll{}
+	out := &v1alpha1.SCMPoll{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollImpl) List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.PollList, error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.SCMPollList, error) {
 	uo, err := w.dyn.Namespace(w.namespace).List(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollList{}
+	out := &v1alpha1.SCMPollList{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollImpl) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.Poll, err error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.SCMPoll, err error) {
 	uo, err := w.dyn.Namespace(w.namespace).Patch(ctx, name, pt, data, opts)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.Poll{}
+	out := &v1alpha1.SCMPoll{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollImpl) Update(ctx context.Context, in *v1alpha1.Poll, opts v1.UpdateOptions) (*v1alpha1.Poll, error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) Update(ctx context.Context, in *v1alpha1.SCMPoll, opts v1.UpdateOptions) (*v1alpha1.SCMPoll, error) {
 	in.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "tekton.dev",
 		Version: "v1alpha1",
-		Kind:    "Poll",
+		Kind:    "SCMPoll",
 	})
 	uo := &unstructured.Unstructured{}
 	if err := convert(in, uo); err != nil {
@@ -210,18 +210,18 @@ func (w *wrapTektonV1alpha1PollImpl) Update(ctx context.Context, in *v1alpha1.Po
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.Poll{}
+	out := &v1alpha1.SCMPoll{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollImpl) UpdateStatus(ctx context.Context, in *v1alpha1.Poll, opts v1.UpdateOptions) (*v1alpha1.Poll, error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) UpdateStatus(ctx context.Context, in *v1alpha1.SCMPoll, opts v1.UpdateOptions) (*v1alpha1.SCMPoll, error) {
 	in.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "tekton.dev",
 		Version: "v1alpha1",
-		Kind:    "Poll",
+		Kind:    "SCMPoll",
 	})
 	uo := &unstructured.Unstructured{}
 	if err := convert(in, uo); err != nil {
@@ -231,42 +231,42 @@ func (w *wrapTektonV1alpha1PollImpl) UpdateStatus(ctx context.Context, in *v1alp
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.Poll{}
+	out := &v1alpha1.SCMPoll{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollImpl) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
+func (w *wrapTektonV1alpha1SCMPollImpl) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return nil, errors.New("NYI: Watch")
 }
 
-func (w *wrapTektonV1alpha1) PollRuns(namespace string) typedtektonv1alpha1.PollRunInterface {
-	return &wrapTektonV1alpha1PollRunImpl{
+func (w *wrapTektonV1alpha1) SCMPollStates(namespace string) typedtektonv1alpha1.SCMPollStateInterface {
+	return &wrapTektonV1alpha1SCMPollStateImpl{
 		dyn: w.dyn.Resource(schema.GroupVersionResource{
 			Group:    "tekton.dev",
 			Version:  "v1alpha1",
-			Resource: "pollruns",
+			Resource: "scmpollstates",
 		}),
 
 		namespace: namespace,
 	}
 }
 
-type wrapTektonV1alpha1PollRunImpl struct {
+type wrapTektonV1alpha1SCMPollStateImpl struct {
 	dyn dynamic.NamespaceableResourceInterface
 
 	namespace string
 }
 
-var _ typedtektonv1alpha1.PollRunInterface = (*wrapTektonV1alpha1PollRunImpl)(nil)
+var _ typedtektonv1alpha1.SCMPollStateInterface = (*wrapTektonV1alpha1SCMPollStateImpl)(nil)
 
-func (w *wrapTektonV1alpha1PollRunImpl) Create(ctx context.Context, in *v1alpha1.PollRun, opts v1.CreateOptions) (*v1alpha1.PollRun, error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) Create(ctx context.Context, in *v1alpha1.SCMPollState, opts v1.CreateOptions) (*v1alpha1.SCMPollState, error) {
 	in.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "tekton.dev",
 		Version: "v1alpha1",
-		Kind:    "PollRun",
+		Kind:    "SCMPollState",
 	})
 	uo := &unstructured.Unstructured{}
 	if err := convert(in, uo); err != nil {
@@ -276,62 +276,62 @@ func (w *wrapTektonV1alpha1PollRunImpl) Create(ctx context.Context, in *v1alpha1
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollRun{}
+	out := &v1alpha1.SCMPollState{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return w.dyn.Namespace(w.namespace).Delete(ctx, name, opts)
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
 	return w.dyn.Namespace(w.namespace).DeleteCollection(ctx, opts, listOpts)
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.PollRun, error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.SCMPollState, error) {
 	uo, err := w.dyn.Namespace(w.namespace).Get(ctx, name, opts)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollRun{}
+	out := &v1alpha1.SCMPollState{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.PollRunList, error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.SCMPollStateList, error) {
 	uo, err := w.dyn.Namespace(w.namespace).List(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollRunList{}
+	out := &v1alpha1.SCMPollStateList{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.PollRun, err error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.SCMPollState, err error) {
 	uo, err := w.dyn.Namespace(w.namespace).Patch(ctx, name, pt, data, opts)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollRun{}
+	out := &v1alpha1.SCMPollState{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) Update(ctx context.Context, in *v1alpha1.PollRun, opts v1.UpdateOptions) (*v1alpha1.PollRun, error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) Update(ctx context.Context, in *v1alpha1.SCMPollState, opts v1.UpdateOptions) (*v1alpha1.SCMPollState, error) {
 	in.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "tekton.dev",
 		Version: "v1alpha1",
-		Kind:    "PollRun",
+		Kind:    "SCMPollState",
 	})
 	uo := &unstructured.Unstructured{}
 	if err := convert(in, uo); err != nil {
@@ -341,18 +341,18 @@ func (w *wrapTektonV1alpha1PollRunImpl) Update(ctx context.Context, in *v1alpha1
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollRun{}
+	out := &v1alpha1.SCMPollState{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) UpdateStatus(ctx context.Context, in *v1alpha1.PollRun, opts v1.UpdateOptions) (*v1alpha1.PollRun, error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) UpdateStatus(ctx context.Context, in *v1alpha1.SCMPollState, opts v1.UpdateOptions) (*v1alpha1.SCMPollState, error) {
 	in.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "tekton.dev",
 		Version: "v1alpha1",
-		Kind:    "PollRun",
+		Kind:    "SCMPollState",
 	})
 	uo := &unstructured.Unstructured{}
 	if err := convert(in, uo); err != nil {
@@ -362,13 +362,13 @@ func (w *wrapTektonV1alpha1PollRunImpl) UpdateStatus(ctx context.Context, in *v1
 	if err != nil {
 		return nil, err
 	}
-	out := &v1alpha1.PollRun{}
+	out := &v1alpha1.SCMPollState{}
 	if err := convert(uo, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (w *wrapTektonV1alpha1PollRunImpl) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
+func (w *wrapTektonV1alpha1SCMPollStateImpl) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return nil, errors.New("NYI: Watch")
 }

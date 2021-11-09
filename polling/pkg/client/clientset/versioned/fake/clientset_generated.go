@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned"
-	tektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/poll/v1alpha1"
-	faketektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/poll/v1alpha1/fake"
+	tektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/scmpoll/v1alpha1"
+	faketektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/scmpoll/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

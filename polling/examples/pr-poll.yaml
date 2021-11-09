@@ -1,0 +1,41 @@
+apiVersion: tekton.dev/v1alpha1
+kind: SCMPoll
+metadata:
+  name: test-pr-poll
+  namespace: tekton-pipelines
+spec:
+  metadata:
+    name: test-pr-poll
+  description: This is an description
+  pollFrequency: 30
+  tidy: true
+  concurrentPipelines: true
+  repositories:
+    - name: repo1
+      type: github-pr
+      serviceAccountName: poll-sa
+      params:
+      - name: url
+        value: https://api.github.com/repos/Jimbo4794/tekton-testing-repo
+      - name: rebuildString
+        value: "rebuild"
+  # This is just a standard pipelineRunSpec
+  pipelineRunSpec:
+    params:
+    - name: IMAGE
+      value: test
+    - name: TestSHA
+      value: $(repo1.commitSHA)
+    - name: TestRefSpec
+      value: $(repo1.refSpec)
+    podTemplate:
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+    pipelineRef:
+      name: docker-build
+    # serviceAccountName: build-bot
+    resources:
+      - name: git-testing-repo
+        resourceRef:
+          name: tekton-testing-repo
+  

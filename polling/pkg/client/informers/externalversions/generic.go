@@ -21,7 +21,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/tektoncd/experimental/polling/pkg/apis/poll/v1alpha1"
+	v1alpha1 "github.com/tektoncd/experimental/polling/pkg/apis/scmpoll/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -53,10 +53,10 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=tekton.dev, Version=v1alpha1
-	case v1alpha1.SchemeGroupVersion.WithResource("polls"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Tekton().V1alpha1().Polls().Informer()}, nil
-	case v1alpha1.SchemeGroupVersion.WithResource("pollruns"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Tekton().V1alpha1().PollRuns().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("scmpolls"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Tekton().V1alpha1().SCMPolls().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("scmpollstates"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Tekton().V1alpha1().SCMPollStates().Informer()}, nil
 
 	}
 

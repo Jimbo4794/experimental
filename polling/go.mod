@@ -5,8 +5,10 @@ go 1.14
 require (
 	github.com/Azure/go-autorest/autorest v0.11.18 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/google/btree v1.0.1 // indirect
+	github.com/moby/moby v20.10.9+incompatible
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/tektoncd/pipeline v0.28.1

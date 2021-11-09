@@ -21,7 +21,7 @@ package versioned
 import (
 	"fmt"
 
-	tektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/poll/v1alpha1"
+	tektonv1alpha1 "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned/typed/scmpoll/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

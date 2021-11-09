@@ -22,8 +22,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/tektoncd/experimental/polling/pkg/reconciler/poll"
-	"github.com/tektoncd/experimental/polling/pkg/reconciler/pollrun"
+	"github.com/tektoncd/experimental/polling/pkg/reconciler/scmpoll"
+	// "github.com/tektoncd/experimental/polling/pkg/reconciler/scmpollstate"
+	corev1 "k8s.io/api/core/v1"
 
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
@@ -36,7 +37,7 @@ const (
 )
 
 var (
-	namespace = flag.String("namespace", "tekton-pipelines", "Namespace to restrict informer to. Optional, defaults to all namespaces.")
+	namespace = flag.String("namespace", corev1.NamespaceAll, "Namespace to restrict informer to. Optional, defaults to all namespaces.")
 )
 
 func main() {
@@ -60,8 +61,8 @@ func main() {
 	}()
 
 	sharedmain.MainWithConfig(ctx, ControllerLogKey, cfg,
-		poll.NewController(*namespace),
-		pollrun.NewController(*namespace))
+		scmpoll.NewController(*namespace))
+	// scmpollstate.NewController(*namespace))
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
