@@ -1,9 +1,9 @@
 # Development notes
 
-I setup the generated components by having the k8s.io/code-generator and k8s.io/apimachinery and running :
+I setup the generated components by locally having the k8s.io/code-generator and k8s.io/apimachinery and running: (There is github versions too)
 
 ```
-~/go/src/k8s.io/code-generator/generate-groups.sh all github.com/tektoncd/experimental/polling/pkg/client github.com/tektoncd/experimental/polling/pkg/apis "poll:v1alpha1"
+hack/generate-groups.sh all github.com/tektoncd/experimental/polling/pkg/client github.com/tektoncd/experimental/polling/pkg/apis "poll:v1alpha1"
 ```
 This generates the client code dir and corresponding code and the zz_generatered.deepcopy.go code for each api
 
@@ -14,6 +14,8 @@ hack/generate-knative.sh injection github.com/tektoncd/experimental/polling/pkg/
 ```
 
 Git Authentication
+
+To allow for more than 60 api calls per hour, the polling requests must be authenticated, allowing a 5000 per hours limit.
 
 Limitation on basic token auth for the time being:
 

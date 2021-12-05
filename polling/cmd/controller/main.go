@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2021 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +22,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/tektoncd/experimental/polling/pkg/reconciler/poll"
-	"github.com/tektoncd/experimental/polling/pkg/reconciler/pollrun"
+	// stateinformer "github.com/tektoncd/experimental/polling/pkg/client/injection/informers/scmpoll/v1alpha1/scmpollstate"
+	"github.com/tektoncd/experimental/polling/pkg/reconciler/scmpoll"
+	"github.com/tektoncd/experimental/polling/pkg/reconciler/scmpollstate"
+	corev1 "k8s.io/api/core/v1"
 
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
@@ -36,7 +38,7 @@ const (
 )
 
 var (
-	namespace = flag.String("namespace", "tekton-pipelines", "Namespace to restrict informer to. Optional, defaults to all namespaces.")
+	namespace = flag.String("namespace", corev1.NamespaceAll, "Namespace to restrict informer to. Optional, defaults to all namespaces.")
 )
 
 func main() {
@@ -60,8 +62,8 @@ func main() {
 	}()
 
 	sharedmain.MainWithConfig(ctx, ControllerLogKey, cfg,
-		poll.NewController(*namespace),
-		pollrun.NewController(*namespace))
+		scmpoll.NewController(*namespace),
+		scmpollstate.NewController(*namespace))
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
