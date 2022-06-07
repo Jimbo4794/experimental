@@ -14,6 +14,7 @@ type GithubPRState struct {
 	RefSpec          string `json:"refSpec"`
 	CommitSHA        string `json:"commitSHA"`
 	RebuildCommentId string `json:"rebuildCommentId"`
+	Authorised       bool   `json:"authorised"`
 	PollClient       GitClient
 }
 
@@ -21,6 +22,7 @@ func GetGithubPRType(s *v1alpha1.SCMRepositoryStatus) (*GithubPRState, error) {
 	state := &GithubPRState{
 		Name:             s.Name,
 		Type:             s.Type,
+		Authorised:       s.Authorised,
 		RebuildCommentId: "",
 	}
 
@@ -74,6 +76,10 @@ func (g *GithubPRState) HasStatusChanged(s v1alpha1.SCMRepositoryStatus) (bool, 
 	}
 	if incomingRefSpec == "" {
 		return false, fmt.Errorf("No RefSpec was passed to compare with")
+	}
+
+	if g.Authorised != s.Authorised {
+		return true, nil
 	}
 
 	if incomingSHA != g.CommitSHA {

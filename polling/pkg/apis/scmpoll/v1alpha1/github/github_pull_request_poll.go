@@ -46,7 +46,9 @@ type GitubPullRequest struct {
 }
 
 type GithubRepoJson struct {
-	Collaborators_url string `json:"collaborators_url"`
+	NodeId           string `json:"node_id"`
+	Name             string `json:"name"`
+	CollaboratorsUrl string `json:"collaborators_url"`
 }
 
 type GithubPRJson struct {
@@ -69,6 +71,10 @@ type GithubPRCommentJson struct {
 	CreatedTime *metav1.Time     `json:"created_at"`
 	Body        string           `json:"body"`
 	User        GithubPRUserJson `json:"user"`
+}
+
+type GithubStatusJson struct {
+	State string `json:"state"`
 }
 
 type GithubPRCommitJson struct {
@@ -115,7 +121,7 @@ func NewPR(name string, r v1alpha1.Repository) (*GitubPullRequest, error) {
 		case strings.EqualFold(param.Name, "rebuildString"):
 			githubPRPoll.RebuildString = param.Value.StringVal
 		case strings.EqualFold(param.Name, "approvalString"):
-			githubPRPoll.RebuildString = param.Value.StringVal
+			githubPRPoll.ApprovalString = param.Value.StringVal
 		}
 	}
 	if githubPRPoll.URL == "" {
@@ -128,27 +134,98 @@ func NewPR(name string, r v1alpha1.Repository) (*GitubPullRequest, error) {
 	return githubPRPoll, nil
 }
 
-func updateStatus(url, status, sha string, gitC GitClient) error {
-	var statusJson = []byte("{\"state\":\"" + status + "\", \"description\":\"Tekton\", \"context\":\"Tekton\"}")
-	return post(gitC, url+"/statuses/"+sha, bytes.NewBuffer(statusJson))
+func (s *GitubPullRequest) Poll() ([]v1alpha1.SCMRepositoryStatus, error) {
+	var responses []v1alpha1.SCMRepositoryStatus
+	pulls, err := getPullRequests(s.PollClient, s.URL)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pull := range pulls {
+		refspec := "refs/pull/" + strconv.Itoa(pull.Number) + "/head:refs/heads/" + pull.Base.Ref
+		commitSha := pull.Head.Sha
+
+		rebuildCommentId, err := checkForRebuildComments(s.PollClient, s.RebuildString, pull)
+		if err != nil {
+			return nil, err
+		}
+		lastCommitTimestamp := getLastCommitTimestamp(s.PollClient, pull.CommitsURL)
+		authorised := s.checkUserHasPermissionsToTrigger(pull)
+		response := v1alpha1.SCMRepositoryStatus{
+			Name:       s.Name,
+			StateId:    s.Name + "-pr" + strconv.Itoa(pull.Number),
+			Type:       v1alpha1.SCMPollTypeGithubPR,
+			Authorised: authorised,
+			StatusParams: []pipelines.Param{
+				{
+					Name: "commitSHA",
+					Value: pipelines.ArrayOrString{
+						Type:      pipelines.ParamTypeString,
+						StringVal: commitSha,
+					},
+				},
+				{
+					Name: "pullRequestNumber",
+					Value: pipelines.ArrayOrString{
+						Type:      pipelines.ParamTypeString,
+						StringVal: strconv.Itoa(pull.Number),
+					},
+				},
+				{
+					Name: "refSpec",
+					Value: pipelines.ArrayOrString{
+						Type:      pipelines.ParamTypeString,
+						StringVal: refspec,
+					},
+				},
+				{
+					Name: "rebuildCommentId",
+					Value: pipelines.ArrayOrString{
+						Type:      pipelines.ParamTypeString,
+						StringVal: rebuildCommentId,
+					},
+				},
+				{
+					Name: "lastCommitTimestamp",
+					Value: pipelines.ArrayOrString{
+						Type:      pipelines.ParamTypeString,
+						StringVal: lastCommitTimestamp.String(),
+					},
+				},
+			},
+		}
+		responses = append(responses, response)
+	}
+	return responses, nil
 }
 
 func (s *GitubPullRequest) Update(status v1alpha1.SCMRepositoryStatus, conds duckv1beta1.Conditions) error {
+	var lastCommitTimestamp time.Time
+	var prNum string
+	for _, param := range status.StatusParams {
+		if param.Name == "lastCommitTimestamp" {
+			t, _ := time.Parse("2006-01-02 15:04:05 +0000 UTC", param.Value.StringVal)
+			lastCommitTimestamp = t
+		}
+		if param.Name == "pullRequestNumber" {
+			prNum = param.Value.StringVal
+		}
+	}
 	for _, param := range status.StatusParams {
 		if param.Name == "commitSHA" {
 			if !status.Authorised {
-				s.comment("", fmt.Sprintf("Can a reposotiry admin please approve these changes. If you are happy with the additions please comment: %s", s.ApprovalString))
+				s.askForApprovalIfRequired(fmt.Sprintf("Can a repo admin please check this commit and comment '%s' to prcoeed to build.", s.ApprovalString), prNum, lastCommitTimestamp)
 				return updateStatus(s.URL, "pending", param.Value.StringVal, s.PollClient)
 			}
 			for _, cond := range conds {
 				if cond.Type == apis.ConditionSucceeded {
 					switch cond.Status {
 					case v1.ConditionUnknown:
-						return updateStatus(s.URL, "pending", param.Value.StringVal, s.PollClient)
+						return updateStatusIfRequired(s.URL, "pending", param.Value.StringVal, s.PollClient)
 					case v1.ConditionFalse:
-						return updateStatus(s.URL, "failure", param.Value.StringVal, s.PollClient)
+						return updateStatusIfRequired(s.URL, "failure", param.Value.StringVal, s.PollClient)
 					case v1.ConditionTrue:
-						return updateStatus(s.URL, "success", param.Value.StringVal, s.PollClient)
+						return updateStatusIfRequired(s.URL, "success", param.Value.StringVal, s.PollClient)
 					}
 				}
 			}
@@ -157,20 +234,56 @@ func (s *GitubPullRequest) Update(status v1alpha1.SCMRepositoryStatus, conds duc
 	return fmt.Errorf("failed to update status")
 }
 
-func (s *GitubPullRequest) comment(prnum, comment string) {
-	// req, _ := http.NewRequest("POST", s.URL+"/issues/"+prnum+"/comments", strings.NewReader("{\"body\":\""+comment+"\"}"))
-	// if s.PollClient.Username != "" && s.PollClient.Token != "" {
-	// 	req.SetBasicAuth(s.PollClient.Username, s.PollClient.Token)
-	// }
-	// _, err := s.PollClient.Client.Do(req)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
+func updateStatusIfRequired(url, status, sha string, gitC GitClient) error {
+	var statusJson []GithubStatusJson
+	err := getJson(gitC, url+"/statuses/"+sha, &statusJson)
+	if err != nil {
+		return err
+	}
+
+	if len(statusJson) == 0 {
+		return updateStatus(url, status, sha, gitC)
+	}
+
+	if statusJson[0].State == status {
+		return nil
+	}
+	return updateStatus(url, status, sha, gitC)
+}
+
+func updateStatus(url, status, sha string, gitC GitClient) error {
+	var statusJson = "{\"state\":\"" + status + "\", \"description\":\"Tekton\", \"context\":\"Tekton\"}"
+	return post(gitC, url+"/statuses/"+sha, bytes.NewBufferString(statusJson))
+}
+
+func (s *GitubPullRequest) askForApprovalIfRequired(commentMessage, prNum string, lastCommitTimestamp time.Time) error {
+	var comments []GithubPRCommentJson
+	err := getJson(s.PollClient, s.URL+"/issues/"+prNum+"/comments", &comments)
+	if err != nil {
+		return err
+	}
+	// Check to see the PR hasnt been updated already
+	for _, comment := range comments {
+		if comment.Body == commentMessage && lastCommitTimestamp.Before(comment.CreatedTime.Time) {
+			fmt.Println("We dont need to")
+			return nil
+		}
+	}
+
+	req, _ := http.NewRequest("POST", s.URL+"/issues/"+prNum+"/comments", strings.NewReader("{\"body\":\""+commentMessage+"\"}"))
+	if s.PollClient.Username != "" && s.PollClient.Token != "" {
+		req.SetBasicAuth(s.PollClient.Username, s.PollClient.Token)
+	}
+	_, err = s.PollClient.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("Failed to comment, asking for approval")
+	}
+	return nil
 }
 
 func getPRComments(gitC GitClient, pull GithubPRJson) ([]GithubPRCommentJson, error) {
 	var comments []GithubPRCommentJson
-	err := getJson(gitC, pull.CommentURL, comments)
+	err := getJson(gitC, pull.CommentURL, &comments)
 	if err != nil {
 		return nil, fmt.Errorf("github.poll: Failed to decode PR comments %s: %s", pull.CommentURL, err)
 	}
@@ -200,12 +313,12 @@ func getAuthorisedUsers(gitC GitClient, url string) []string {
 	var repo GithubRepoJson
 	var collaborators []GithubCollaboratorsJson
 	var users []string
-	err := getJson(gitC, url, repo)
+	err := getJson(gitC, url, &repo)
 	if err != nil {
 		return nil
 	}
 
-	err = getJson(gitC, strings.Replace(repo.Collaborators_url, "{/collaborator}", "", 1), collaborators)
+	err = getJson(gitC, strings.Replace(repo.CollaboratorsUrl, "{/collaborator}", "", 1), &collaborators)
 	if err != nil {
 		return nil
 	}
@@ -220,6 +333,7 @@ func getAuthorisedUsers(gitC GitClient, url string) []string {
 }
 
 func (s *GitubPullRequest) checkUserHasPermissionsToTrigger(pr GithubPRJson) bool {
+	fmt.Println("CHECKING USER HAS PERMISSIONS TO TRIGGER")
 	allowedUsers := getAuthorisedUsers(s.PollClient, s.URL)
 	for _, u := range allowedUsers {
 		if pr.User.Login == u {
@@ -229,9 +343,9 @@ func (s *GitubPullRequest) checkUserHasPermissionsToTrigger(pr GithubPRJson) boo
 	return s.checkForApproval(pr, allowedUsers)
 }
 
-func getLastCommitTimestamp(gitC GitClient, pr GithubPRJson) *metav1.Time {
+func getLastCommitTimestamp(gitC GitClient, commitsURL string) *metav1.Time {
 	var commits []GithubPRCommitJson
-	err := getJson(gitC, pr.CommitsURL, commits)
+	err := getJson(gitC, commitsURL, &commits)
 	if err != nil {
 		return nil
 	}
@@ -242,7 +356,7 @@ func getLastCommitTimestamp(gitC GitClient, pr GithubPRJson) *metav1.Time {
 }
 
 func (s *GitubPullRequest) checkForApproval(pr GithubPRJson, allowedUsers []string) bool {
-	lastCommitTimestamp := getLastCommitTimestamp(s.PollClient, pr)
+	lastCommitTimestamp := getLastCommitTimestamp(s.PollClient, pr.CommitsURL)
 	comments, _ := getPRComments(s.PollClient, pr)
 	for _, comment := range comments {
 		// check comments after latest commit as dont want to approve a newer commit with old comment
@@ -262,56 +376,6 @@ func (s *GitubPullRequest) checkForApproval(pr GithubPRJson, allowedUsers []stri
 	}
 
 	return false
-}
-
-func (s *GitubPullRequest) Poll() ([]v1alpha1.SCMRepositoryStatus, error) {
-	var responses []v1alpha1.SCMRepositoryStatus
-	pulls, err := getPullRequests(s.PollClient, s.URL)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, pull := range pulls {
-		refspec := "refs/pull/" + strconv.Itoa(pull.Number) + "/head:refs/heads/" + pull.Base.Ref
-		commitSha := pull.Head.Sha
-
-		rebuildCommentId, err := checkForRebuildComments(s.PollClient, s.RebuildString, pull)
-		if err != nil {
-			return nil, err
-		}
-		authorised := s.checkUserHasPermissionsToTrigger(pull)
-		response := v1alpha1.SCMRepositoryStatus{
-			Name:       s.Name,
-			StateId:    s.Name + "-pr" + strconv.Itoa(pull.Number),
-			Type:       v1alpha1.SCMPollTypeGithubPR,
-			Authorised: authorised,
-			StatusParams: []pipelines.Param{
-				{
-					Name: "commitSHA",
-					Value: pipelines.ArrayOrString{
-						Type:      pipelines.ParamTypeString,
-						StringVal: commitSha,
-					},
-				},
-				{
-					Name: "refSpec",
-					Value: pipelines.ArrayOrString{
-						Type:      pipelines.ParamTypeString,
-						StringVal: refspec,
-					},
-				},
-				{
-					Name: "rebuildCommentId",
-					Value: pipelines.ArrayOrString{
-						Type:      pipelines.ParamTypeString,
-						StringVal: rebuildCommentId,
-					},
-				},
-			},
-		}
-		responses = append(responses, response)
-	}
-	return responses, nil
 }
 
 func getPullRequests(gitC GitClient, url string) ([]GithubPRJson, error) {
@@ -363,7 +427,7 @@ func post(gitC GitClient, url string, body io.Reader) error {
 		if resp.Header.Get("x-ratelimit-remaining") == "0" {
 			return fmt.Errorf("github.poll: rate limit exceeded: curent rate limit: %v, rate reset at %v", resp.Header.Get("X-RateLimit-limit"), resp.Header.Get("X-RateLimit-Reset"))
 		}
-		return fmt.Errorf("github.poll: bad response from repo %s: %s", url, err)
+		return fmt.Errorf("github.poll: bad response %v from repo %s: %s", resp, url, err)
 	}
 	defer resp.Body.Close()
 	return nil

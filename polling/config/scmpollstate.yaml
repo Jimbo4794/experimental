@@ -33,9 +33,9 @@ spec:
       - name: LastUpdate
         type: string
         jsonPath: ".status.lastUpdate"
-      - name: NextSchdeuledPoll
+      - name: StateStatus
         type: string
-        jsonPath: ".status.nextPoll"
+        jsonPath: ".status.stateStatus"
     schema:
       openAPIV3Schema:
         type: object

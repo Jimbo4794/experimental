@@ -25,6 +25,7 @@ type SCMPollState struct {
 
 type SCMPollStateSpec struct {
 	Name         string                    `json:"name"`
+	Repositories []Repository              `json:"repositories"`
 	Tidy         bool                      `json:"tidy"`
 	Pending      bool                      `json:"pending"`
 	PipelineSpec pipelines.PipelineRunSpec `json:"pipelineSpec"`
@@ -37,6 +38,16 @@ type SCMPollStateStatus struct {
 	SCMPollStateStatusFields `json:",inline"`
 }
 
+type StateStatus = string
+
+const (
+	StatePass    StateStatus = "pass"
+	StateFailed  StateStatus = "failed"
+	StateUnknown StateStatus = "unknown"
+)
+
+var StateStatusReasons = []SCMPollType{StatePass, StateFailed, StateUnknown}
+
 type SCMPollStateStatusFields struct {
 	// +optional
 	PipelineRunning bool `json:"pipelineRunning"`
@@ -47,13 +58,13 @@ type SCMPollStateStatusFields struct {
 	// +optional
 	LastUpdate *metav1.Time `json:"lastUpdate"`
 
-	// An indication of when the next scmpoll is due
+	// A state of the pipelines
 	// +optional
-	NextPoll *metav1.Time `json:"nextPoll,omitempty"`
+	StateStatus StateStatus `json:"stateStatus"`
 
 	// The status of repos being watched from a scmpoll
 	// +optional
-	SCMPollStates map[string]*SCMRepositoryStatus `json:"scmpollStates"`
+	SCMPollRepos map[string]*SCMRepositoryStatus `json:"scmpollRepos"`
 }
 
 type SCMPollStateInterface interface {

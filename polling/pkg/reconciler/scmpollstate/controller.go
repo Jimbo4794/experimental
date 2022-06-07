@@ -46,7 +46,7 @@ func NewController(namespace string) func(ctx context.Context, cmw configmap.Wat
 			}
 		})
 
-		pollInformer.Informer().AddEventHandler(controller.HandleAll(impl.Enqueue))
+		pollRunInformer.Informer().AddEventHandler(controller.HandleAll(impl.Enqueue))
 
 		return impl
 	}

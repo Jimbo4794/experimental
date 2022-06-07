@@ -12,15 +12,15 @@ import (
 	scmpoll "github.com/tektoncd/experimental/polling/pkg/client/clientset/versioned"
 	scmpollInformers "github.com/tektoncd/experimental/polling/pkg/client/informers/externalversions/scmpoll/v1alpha1"
 	scmpollListers "github.com/tektoncd/experimental/polling/pkg/client/listers/scmpoll/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
+
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
-	"knative.dev/pkg/apis"
-	"knative.dev/pkg/apis/duck/v1beta1"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/logging"
+
+	pipelines "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 
 	pkgreconciler "knative.dev/pkg/reconciler"
 )
@@ -52,7 +52,7 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, p *v1alpha1.SCMPoll) pkg
 	}
 
 	// Get poll list
-	pollRepos, err := scmpollv1alpha1.FormRunList(p.Name, p)
+	pollRepos, err := scmpollv1alpha1.GetTypedRepoList(p.Spec.Repositories)
 	if err != nil {
 		return controller.NewPermanentError(fmt.Errorf("Problem creating poll list %v", err))
 	}
@@ -64,25 +64,27 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, p *v1alpha1.SCMPoll) pkg
 	}
 
 	// Poll
-	requiredStates, err := c.PollRepos(ctx, pollRepos)
+	desiredStates, err := c.PollRepos(ctx, pollRepos)
 	if err != nil {
 		return controller.NewPermanentError(err)
 	}
 
-	// Remove any stale states
-	err = c.removeStaleStates(ctx, p, requiredStates)
-	if err != nil {
-		return controller.NewPermanentError(err)
-	}
-
-	return c.reconcileStates(ctx, p, requiredStates)
+	return c.reconcileStates(ctx, p, desiredStates)
 }
 
-func (c *Reconciler) reconcileStates(ctx context.Context, p *v1alpha1.SCMPoll, requiredStates map[v1alpha1.SCMPollRepositoryInteface][]v1alpha1.SCMRepositoryStatus) pkgreconciler.Event {
+func (c *Reconciler) reconcileStates(ctx context.Context, p *v1alpha1.SCMPoll, desiredStates map[v1alpha1.SCMPollRepositoryInteface][]v1alpha1.SCMRepositoryStatus) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
-	for repo, states := range requiredStates {
+
+	// Remove any stale states
+	err := c.removeStaleStates(ctx, p, desiredStates)
+	if err != nil {
+		return controller.NewPermanentError(err)
+	}
+
+	for repo, states := range desiredStates {
 		logger.Debugf("Looking at repo %s, has states: %v", repo.GetName(), states)
 		for _, state := range states {
+			logger.Debugf("Looking for state: %s, ID: %s, Params: %v", state.Name, state.StateId, state.StatusParams)
 			selector := labels.NewSelector().
 				Add(mustNewRequirement("scmpoll", selection.Equals, []string{p.Name})).
 				Add(mustNewRequirement("stateid", selection.Equals, []string{state.StateId}))
@@ -92,44 +94,53 @@ func (c *Reconciler) reconcileStates(ctx context.Context, p *v1alpha1.SCMPoll, r
 				return controller.NewPermanentError(fmt.Errorf("Problem listing states: %v", err))
 			}
 
+			// New state
 			if sysState == nil {
 				logger.Debugf("No state found - Generating new state")
-
-				repo.Update(state, v1beta1.Conditions{
-					{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionUnknown,
-					},
-				})
-
-				err = c.createState(ctx, p, state.StateId, repo.GetName())
+				err = c.createState(ctx, p, repo.GetName(), state)
 				if err != nil {
 					return err
 				}
 				return controller.NewRequeueImmediately()
 			}
+			logger.Debugf("Found a state in the system: %v", sysState)
 
 			if sysState.Spec.Pending {
-				return controller.NewRequeueAfter(time.Second)
+				continue
 			}
 
-			currentStates, err := poll.GetCurrentRepoPollStates(sysState)
+			// Translate the retrieved states into typed states
+			currentRepos, err := poll.GetTypedRepoStates(sysState)
 			if err != nil {
 				return fmt.Errorf("failed to find scmpollstate states: %s", err)
 			}
 
-			for _, currentState := range currentStates {
-				updated, err := currentState.HasStatusChanged(state)
-				if err != nil {
-					return fmt.Errorf("failed checking state status: %s", err)
-				}
-
-				sysState.Status.Outdated = updated
+			if currentRepo, ok := currentRepos[repo.GetName()]; !ok {
+				sysState.Status.SCMPollRepos[repo.GetName()] = &state
 				_, err = c.SCMPollClientSet.TektonV1alpha1().SCMPollStates(p.Namespace).UpdateStatus(ctx, sysState, v1.UpdateOptions{})
 				if err != nil {
 					return controller.NewPermanentError(fmt.Errorf("Failed to update state status: %s", err))
 				}
+				continue
+			} else {
+				updated, err := currentRepo.HasStatusChanged(state)
+				if err != nil {
+					return fmt.Errorf("failed checking state status: %s", err)
+				}
+
+				// New update
+				if updated {
+					sysState.Status.Outdated = updated
+					sysState.Status.SCMPollRepos[repo.GetName()] = &state
+					_, err = c.SCMPollClientSet.TektonV1alpha1().SCMPollStates(p.Namespace).UpdateStatus(ctx, sysState, v1.UpdateOptions{})
+					if err != nil {
+						return controller.NewPermanentError(fmt.Errorf("Failed to update state status: %s", err))
+					}
+					continue
+				}
 			}
+			sysState.Status.LastUpdate = &v1.Time{Time: time.Now()}
+			c.SCMPollClientSet.TektonV1alpha1().SCMPollStates(p.Namespace).UpdateStatus(ctx, sysState, v1.UpdateOptions{})
 		}
 	}
 	return c.completePoll(ctx, p)
@@ -150,23 +161,30 @@ func (c *Reconciler) PollRepos(ctx context.Context, repos map[string]v1alpha1.SC
 	return states, nil
 }
 
-func (c *Reconciler) updateNextPollStatus(ctx context.Context, state *v1alpha1.SCMPollState, pollFrequency int) error {
-	state, _ = c.SCMPollClientSet.TektonV1alpha1().SCMPollStates(state.Namespace).Get(ctx, state.Name, v1.GetOptions{})
-	state.Status.NextPoll = &v1.Time{
-		Time: time.Now().Add(time.Second * time.Duration(pollFrequency)),
+func (c *Reconciler) createState(ctx context.Context, p *v1alpha1.SCMPoll, repoName string, polledState v1alpha1.SCMRepositoryStatus) error {
+	logger := logging.FromContext(ctx)
+	logger.Debugf("Creating state from %v", polledState)
+	var parms []pipelines.Param
+	pipelineSpec := p.Spec.PipelineRunSpec
+	subs := make(map[string]string)
+	for _, param := range polledState.StatusParams {
+		logger.Debugf("Adding the value to be subsituted: %s:%s", polledState.Name+"."+param.Name, param.Value.StringVal)
+		subs[polledState.Name+"."+param.Name] = param.Value.StringVal
 	}
-	_, err := c.SCMPollClientSet.TektonV1alpha1().SCMPollStates(state.Namespace).UpdateStatus(ctx, state, v1.UpdateOptions{})
-	return err
-}
+	logger.Debugf("Need to apply subsitutions to spec params %v:%v", subs, pipelineSpec.Params)
+	for _, p := range pipelineSpec.Params {
+		p.Value.ApplyReplacements(subs, nil)
+		parms = append(parms, p)
+	}
+	pipelineSpec.Params = parms
 
-func (c *Reconciler) createState(ctx context.Context, p *v1alpha1.SCMPoll, stateId, repoName string) error {
 	s := &v1alpha1.SCMPollState{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      p.Name + "-" + stateId,
+			Name:      p.Name + "-" + polledState.StateId,
 			Namespace: p.Namespace,
 			Labels: map[string]string{
 				"scmpoll": p.Name,
-				"stateid": stateId,
+				"stateid": polledState.StateId,
 			},
 			OwnerReferences: []v1.OwnerReference{
 				{
@@ -180,9 +198,10 @@ func (c *Reconciler) createState(ctx context.Context, p *v1alpha1.SCMPoll, state
 		},
 		Spec: v1alpha1.SCMPollStateSpec{
 			Name:         repoName,
+			Repositories: p.Spec.Repositories,
 			Tidy:         p.Spec.Tidy,
 			Pending:      true,
-			PipelineSpec: p.Spec.PipelineRunSpec,
+			PipelineSpec: pipelineSpec,
 		},
 	}
 	_, err := c.SCMPollClientSet.TektonV1alpha1().SCMPollStates(p.Namespace).Create(ctx, s, v1.CreateOptions{})
@@ -192,7 +211,7 @@ func (c *Reconciler) createState(ctx context.Context, p *v1alpha1.SCMPoll, state
 	return nil
 }
 
-func (c *Reconciler) removeStaleStates(ctx context.Context, p *v1alpha1.SCMPoll, requiredStates map[v1alpha1.SCMPollRepositoryInteface][]v1alpha1.SCMRepositoryStatus) error {
+func (c *Reconciler) removeStaleStates(ctx context.Context, p *v1alpha1.SCMPoll, desiredStates map[v1alpha1.SCMPollRepositoryInteface][]v1alpha1.SCMRepositoryStatus) error {
 	logger := logging.FromContext(ctx)
 	var states []string
 	selector := labels.NewSelector().Add(mustNewRequirement("scmpoll", selection.Equals, []string{p.Name}))
@@ -201,7 +220,7 @@ func (c *Reconciler) removeStaleStates(ctx context.Context, p *v1alpha1.SCMPoll,
 		return err
 	}
 	// Create the list of all polled states
-	for _, statelist := range requiredStates {
+	for _, statelist := range desiredStates {
 		for _, state := range statelist {
 			states = append(states, p.Name+"-"+state.StateId)
 		}

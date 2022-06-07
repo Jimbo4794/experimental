@@ -26,36 +26,36 @@ const (
 	SCMPollLabelKey = "/scmpoll"
 )
 
-func GetCurrentRepoPollStates(s *scmpollv1alpha1.SCMPollState) (map[string]scmpollv1alpha1.SCMPollStateInterface, error) {
-	repoStates := make(map[string]scmpollv1alpha1.SCMPollStateInterface)
+func GetTypedRepoStates(s *scmpollv1alpha1.SCMPollState) (map[string]scmpollv1alpha1.SCMPollStateInterface, error) {
+	repos := make(map[string]scmpollv1alpha1.SCMPollStateInterface)
 	// Returns a typed PollState object that can be used for versions compares
-	for _, state := range s.Status.SCMPollStates {
-		switch state.Type {
+	for _, repo := range s.Status.SCMPollRepos {
+		switch repo.Type {
 		case scmpollv1alpha1.SCMPollTypeGithubHead:
-			gState, err := github.GetGithubHeadType(state)
+			gState, err := github.GetGithubHeadType(repo)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to create git state: ", err)
 			}
-			repoStates[state.Name] = gState
+			repos[repo.Name] = gState
 		case scmpollv1alpha1.SCMPollTypeGithubPR:
-			gprState, err := github.GetGithubPRType(state)
+			gprState, err := github.GetGithubPRType(repo)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to create git pr state: ", err)
 			}
-			repoStates[state.Name] = gprState
+			repos[repo.Name] = gprState
 		default:
 			return nil, fmt.Errorf("%v is an invalid or unimplemented poll state", s)
 		}
 	}
-	return repoStates, nil
+	return repos, nil
 
 }
 
 // Creates and returns a list of the endpoints to watch and poll.
-func FormRunList(name string, r *scmpollv1alpha1.SCMPoll) (map[string]scmpollv1alpha1.SCMPollRepositoryInteface, error) {
+func GetTypedRepoList(r []scmpollv1alpha1.Repository) (map[string]scmpollv1alpha1.SCMPollRepositoryInteface, error) {
 	pipelines := make(map[string]scmpollv1alpha1.SCMPollRepositoryInteface)
 	// Check we support all the polls then add to the list of polls
-	for _, poll := range r.Spec.Repositories {
+	for _, poll := range r {
 		switch poll.SCMPollType {
 		case scmpollv1alpha1.SCMPollTypeGithubHead:
 			gPoll, err := github.NewHead(poll.Name, poll)

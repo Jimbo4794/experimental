@@ -1,0 +1,61 @@
+apiVersion: tekton.dev/v1alpha1
+kind: SCMPoll
+metadata:
+  name: managers-pr-poll
+  namespace: galasa-tekton
+spec:
+  metadata:
+    name: managers-pr-poll
+  description: This is an description
+  pollFrequency: 30
+  tidy: true
+  concurrentPipelines: true
+  repositories:
+    - name: managers
+      type: github-pr
+      serviceAccountName: poll-sa
+      params:
+      - name: url
+        value: https://api.github.com/repos/galasa-dev/managers
+      - name: rebuildString
+        value: "rebuild"
+      - name: approvalString
+        value: "approve tekton build"
+  # This is just a standard pipelineRunSpec
+  pipelineRunSpec:
+    params:
+    - name: distBranch
+      value: main
+    - name: refspec
+      value: $(managers.refSpec)
+    - name: noPush
+      value: "--no-push"
+    pipelineRef:
+      name: managers-repo-build
+    serviceAccountName: build-bot
+    podTemplate:
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+        platform: hdc
+      volumes:
+      - name: gpggradle
+        secret:
+          secretName: gpggradle
+      - name: gpgkey
+        secret:
+          secretName: gpgkey
+      hostAliases:
+      - ip: "10.58.0.20"
+        hostnames:
+        - "nexus.cics-ts.hur.hdclab.intranet.ibm.com"
+    workspaces:
+    - name: git-workspace
+      volumeClaimTemplate:
+        spec:
+          storageClassName: rbd
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+  
